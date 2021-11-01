@@ -1,4 +1,10 @@
+import os
+import argparse
+import random
+
+import utils
 from model import VAE
+
 import torch
 import numpy as np
 import torchvision
@@ -8,22 +14,58 @@ from torch.utils.data import DataLoader
 import cv2
 import torch.nn.functional as F
 from glob import glob
-import pandas
-#from google.colab.patches import cv2_imshow
-import utils
-import os
-import argparse
 
-device = 'cuda:0'
 
+def set_seed(seed):
+    if seed == 0:
+        print(' random seed')
+        torch.backends.cudnn.benchmark = True
+    else:
+        print('manual seed:', seed)
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed) # if use multi-GPU
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+def set_gpu(args):
+    gpu_list = [int(x) for x in args.gpu.split(',')]
+    print('use gpu:', gpu_list)
+    os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+    return gpu_list.__len__()
+
+def set_save_path(config):
+    save_path = os.path.join(config.save_root, config.dataset)
+
+    if config.mode == 'train':
+        # train mode needs path for save parameter
+        save_path = os.path.join(save_path, 'param')
+    elif config.mode == 'test':
+        # test mode needs path for save image
+        save_path = os.path.join(save_path, 'img')
+    else:
+        raise ValueError
+
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+        print('make directory ...', str(save_path))
+
+    return save_path
 
 def get_command_line_parser():
     parser = argparse.ArgumentParser()
 
+    #about gpu
+    parser.add_argument('--gpu', type=str, default='0,1')
+
     #about execute option
     parser.add_argument('--dataset', type=str, default='toothbrush', choices=['toothbrush', 'bottle', 'capsule'])
     parser.add_argument('--dataroot', type=str, default='datasets/')
-    parser.add_argument('--mode', type=str, default='test', choices=['train', 'test'])
+    parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'])
+    parser.add_argument('--seed', type=int, default=1)
 
     #about training
     parser.add_argument('--epochs', type=int, default=1500)
@@ -34,10 +76,15 @@ def get_command_line_parser():
     parser.add_argument('--weight_path', type=str, default='datasets/toothbrush/model.pth')
 
     #about save
-    parser.add_argument('--save_img', type=str, default='result/img')
-    parser.add_argument('--save_pth', type=str, default='result/path')
+    parser.add_argument('--save_root', type=str, default='result/')
 
-    return parser
+    config = parser.parse_args()
+
+    config.device = torch.device(f'cuda:{config.gpu}' if torch.cuda.is_available() else 'cpu')
+    torch.cuda.set_device(config.device)
+    print('Current cuda device ', torch.cuda.current_device())
+
+    return config
 
 
 class MVDataset(Dataset):
@@ -80,6 +127,7 @@ class Trainer(object):
         self.epochs = config.epochs
         self.batch_size = config.batch_size
         self.learning_rate = config.lr
+        self.device = config.device
         self._build_model()
         self.binary_cross_entropy = torch.nn.BCELoss()
 
@@ -93,7 +141,7 @@ class Trainer(object):
 
     def _build_model(self):
         net = VAE()
-        self.net = net.to(device)
+        self.net = net.to(self.device)
         self.net.train()
 
         print('Finish build model.')
@@ -103,20 +151,27 @@ class Trainer(object):
         kldivergence = -0.5 * torch.sum(1+ logvar - mu.pow(2) - logvar.exp()) 
         return recon_loss + 0.000001 * kldivergence
 
+    def exp_name(self, epoch):
+        name = ""
+        name += "epo-"+str(epoch)
+        name += "_lr-"+str(self.learning_rate)
+        name += "_bs-"+str(self.batch_size)
+        return name
+
     def train(self, config):
-        path = os.path.join(config.save_pth, config.dataset)
-        if not os.path.exists(path):
-            os.makedirs(path)
-            print('make directory ...', path)
-
         for epoch in tqdm.tqdm(range(self.epochs + 1)):
-            if epoch % 200 == 0:
-                torch.save(self.net.state_dict(), "_".join(['model', str(epoch), '.pth'])) #Change this path
+            if epoch == 10 or epoch == 500:
+                name = self.exp_name(epoch)
+                path = os.path.join(config.save_path,name)
 
+                path += ".pth"
+                print("save params to ... ", path)
+
+                torch.save(self.net.state_dict(), path)
 
             for batch_idx, samples in enumerate(self.dataloader):
                 x_train, y_train = samples
-                x_train, y_train = x_train.to(device), y_train.to(device)
+                x_train, y_train = x_train.to(self.device), y_train.to(self.device)
 
                 g, latent_mu, latent_var = self.net.forward(x_train)
                 loss = self.vae_loss(g, x_train, latent_mu, latent_var)
@@ -132,9 +187,10 @@ class Trainer(object):
 class Tester(object):
     def __init__(self, config):
         self.batch_size = config.batch_size
+        self.device = config.device
         self._build_model()
 
-        dataset = MVDataset(config, method='test')
+        dataset = MVDataset(config)
         self.root = dataset.root
         self.dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
         self.datalen = dataset.__len__()
@@ -142,18 +198,22 @@ class Tester(object):
 
         # Load of pretrained_weight file
         weight_PATH = config.weight_path
+        print('using weight ...', weight_PATH)
+
         self.net.load_state_dict(torch.load(weight_PATH))
 
         print("Testing...")
 
     def _build_model(self):
         net = VAE()
-        self.net = net.to(device)
+        self.net = net.to(self.device)
         self.net.train()
 
         print('Finish build model.')
 
-    def test(self, save_path):
+    def test(self, config):
+        save_path = config.save_path
+        print('save to ...', save_path)
         if not os.path.exists(save_path):
             os.mkdir(save_path)
             print('make dir path:', save_path)
@@ -178,14 +238,22 @@ class Tester(object):
 
 
 def main():
+    config = get_command_line_parser()
+    set_seed(config.seed)
+    config.n_gpu = set_gpu(config)
+    config.save_path = set_save_path(config)
 
-    config = get_command_line_parser().parse_args()
 
-    trainer = Trainer(config)
-    trainer.train(config)
-
-    #tester = Tester(config)
-    #tester.test(config.save_pth)
+    if config.mode == 'train':
+        print("train mode!")
+        trainer = Trainer(config)
+        trainer.train(config)
+    elif config.mode == 'test':
+        print("test mode!")
+        tester = Tester(config)
+        tester.test(config)
+    else:
+        raise ValueError
 
 if __name__ == '__main__':
     main()
