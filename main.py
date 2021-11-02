@@ -1,6 +1,7 @@
 import os
 import argparse
 import random
+from tqdm import tqdm
 
 import utils
 from model import VAE
@@ -8,7 +9,6 @@ from model import VAE
 import torch
 import numpy as np
 import torchvision
-import tqdm
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import cv2
@@ -74,6 +74,7 @@ def get_command_line_parser():
 
     #about test option
     parser.add_argument('--weight_path', type=str, default='datasets/toothbrush/model.pth')
+    parser.add_argument('--threshold', type=float, default=0.2)
 
     #about save
     parser.add_argument('--save_root', type=str, default='result/')
@@ -99,10 +100,10 @@ class MVDataset(Dataset):
             self.img_path = sorted(glob(self.root + '*.png'))
  
         elif self.mode == 'test':
-            self.root = os.path.join(self.root, self.mode, 'defective/')
+            self.root = os.path.join(self.root, self.mode, 'squeeze/')
             self.img_path = sorted(glob(self.root + '*.png'))
 
-        for i in tqdm.tqdm(range(len(self.img_path))):
+        for i in tqdm(range(len(self.img_path))):
             img = cv2.imread(self.img_path[i], cv2.IMREAD_COLOR)
             print(self.img_path[i])
             b, g, r = cv2.split(img)
@@ -159,7 +160,7 @@ class Trainer(object):
         return name
 
     def train(self, config):
-        for epoch in tqdm.tqdm(range(self.epochs + 1)):
+        for epoch in tqdm(range(self.epochs + 1)):
             if epoch == 10 or epoch == 500:
                 name = self.exp_name(epoch)
                 path = os.path.join(config.save_path,name)
@@ -179,7 +180,12 @@ class Trainer(object):
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-             
+
+        name = self.exp_name(self.epochs)
+        path = os.path.join(config.save_path, name)
+        path += ".pth"
+        print("save params to ... ", path)
+        torch.save(self.net.state_dict(), path)
 
         print('Finish training.')
 
@@ -225,7 +231,7 @@ class Tester(object):
             x_test2 = 256. * x_test
             out2 = 256. * out[0]
 
-            abnomal = utils.compare_images_colab(x_test2[0].clone().permute(1, 2, 0).cpu().detach().numpy(), out2[0].clone().permute(1, 2, 0).cpu().detach().numpy(), None, 0.2)
+            abnomal = utils.compare_images_colab(x_test2[0].clone().permute(1, 2, 0).cpu().detach().numpy(), out2[0].clone().permute(1, 2, 0).cpu().detach().numpy(), None, config.threshold)
 
             ori_path = os.path.join(save_path, 'test_%d_ori.png' % batch_idx)
             gen_path = os.path.join(save_path, 'test_%d_gen.png' % batch_idx)
