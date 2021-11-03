@@ -22,7 +22,7 @@ def get_command_line_parser():
     parser.add_argument('--dataroot', type=str, default='datasets/')
     parser.add_argument('--mode', type=str, default='train',
                         choices=['train', 'test/defective', 'test/poke', 'test/squeeze', 'test/broken_large',
-                                 'test/broken_small', 'test/contamination'])
+                                 'test/broken_small', 'test/contamination', 'test/crack'])
     parser.add_argument('--seed', type=int, default=1)
 
     # about training
@@ -109,6 +109,8 @@ class Trainer(object):
     def train(self, config):
         epochs = config.epochs
         for epoch in tqdm(range(epochs + 1)):
+            # if save params when specific epoch, use below
+            """
             if epoch == 10 or epoch == 500:
                 name = exp_name(epoch, config.lr, config.batch_size, config.constant)
                 path = os.path.join(config.save_path, name)
@@ -116,7 +118,7 @@ class Trainer(object):
                 path += ".pth"
                 print("save params to ... ", path)
 
-                torch.save(self.net.state_dict(), path)
+                torch.save(self.net.state_dict(), path)"""
 
             for batch_idx, samples in enumerate(self.dataloader):
                 x_train, y_train = [_.cuda() for _ in samples]
@@ -159,7 +161,7 @@ class Tester(object):
     def _build_model(self):
         net = VAE()
         self.net = net.to(device)
-        self.net.train()
+        self.net.eval()
 
         print('Finish build model.')
 
