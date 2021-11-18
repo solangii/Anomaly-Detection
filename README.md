@@ -9,17 +9,10 @@ Course Project of CSE545 Advanced Computer Vision, UNIST
 ### Prepare data
 
 1. Download the dataset from this [link](https://www.mvtec.com/company/research/datasets/mvtec-ad). You can select and download each object. 
-
-2. ```
-   mkdir datasets
-   cd datasets
-   ```
+2. `mkdir datasets` and `cd datasets`
 
 3. Move the downloaded dataset to this location.
-
-4. ```
-   tar -xvf [file_name].tar.xz
-   ```
+4. `tar -xvf [file_name].tar.xz`
 
 
 
