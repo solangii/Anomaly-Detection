@@ -71,7 +71,7 @@ optional arguments:
 
 ### Result
 
-<img src="img/010.png" alt=""/>
+<img src="img/010.png" alt="" style="zoom:75%;"/>
 
 `toothbrush/test/defective/010.png`
 
