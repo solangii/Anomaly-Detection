@@ -2,7 +2,6 @@ import argparse
 from glob import glob
 
 import cv2
-import torch
 import torchvision
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
@@ -19,7 +18,7 @@ def get_command_line_parser():
 
     # about execute option
     parser.add_argument('--dataset', type=str, default='toothbrush', choices=['toothbrush', 'bottle', 'capsule'])
-    parser.add_argument('--dataroot', type=str, default='datasets/')
+    parser.add_argument('--dataroot', type=str, default='../datasets/')
     parser.add_argument('--mode', type=str, default='train',
                         choices=['train', 'test/defective', 'test/poke', 'test/squeeze', 'test/broken_large',
                                  'test/broken_small', 'test/contamination', 'test/crack'])
@@ -36,8 +35,9 @@ def get_command_line_parser():
     parser.add_argument('--threshold', type=float, default=0.2, help='using at calculating difference')
 
     # about save
-    parser.add_argument('--save_root', type=str, default='result/')
-    parser.add_argument('--memo', type=str, default='')
+    parser.add_argument('--save_root', type=str, default='../result/')
+    parser.add_argument('--memo', type=str, default='',
+                        help='make folder with value of parameter at `result/[dataset]/img`')
 
     config = parser.parse_args()
 
