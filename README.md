@@ -2,9 +2,7 @@
 Course Project of CSE545 Advanced Computer Vision, UNIST
 ```
 
-*Skeleton codes were provided by Prof. Baek
-
-## Anormaly Detection
+## Anomaly Detection
 
 ### Prepare data
 
